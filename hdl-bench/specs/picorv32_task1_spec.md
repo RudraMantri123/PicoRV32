@@ -2,63 +2,64 @@
 
 ## Context
 
-PicoRV32 is a small RISC-V (RV32I) processor core implementation. This task requires adding a performance counter that tracks the number of conditional branch instructions executed by the processor.
+PicoRV32 is a small RISC-V (RV32I) CPU core. This task is about adding a performance counter that counts conditional branch instructions.
 
-## Requirements
+## What to Do
 
-### Feature: Branch Instruction Counter
+Add a 32-bit counter register that increments every time a conditional branch instruction executes. The counter should be readable via a CSR (Control and Status Register).
 
-Add a new 32-bit performance counter register that counts the number of conditional branch instructions (beq, bne, blt, bge, bltu, bgeu) that are executed/retired by the processor.
+### Counter Details
 
-### Behavioral Requirements
+Add a register called `count_branch` (32 bits). It increments whenever one of these branch instructions executes:
+- `beq` - branch if equal
+- `bne` - branch if not equal  
+- `blt` - branch if less than (signed)
+- `bge` - branch if greater or equal (signed)
+- `bltu` - branch if less than (unsigned)
+- `bgeu` - branch if greater or equal (unsigned)
 
-1. **Counter Register**: Add a 32-bit register `count_branch` that increments whenever a conditional branch instruction completes execution.
+Important: Count ALL branches, whether they're taken or not. The counter increments when `is_beq_bne_blt_bge_bltu_bgeu` is true.
 
-2. **Reset Behavior**: The counter must reset to 0 when the processor is reset (when `resetn` is low).
+### Reset
 
-3. **Increment Condition**: The counter increments when any of the following conditional branch instructions are executed:
-   - `beq` (branch if equal)
-   - `bne` (branch if not equal)
-   - `blt` (branch if less than, signed)
-   - `bge` (branch if greater than or equal, signed)
-   - `bltu` (branch if less than, unsigned)
-   - `bgeu` (branch if greater than or equal, unsigned)
+The counter resets to 0 when `resetn` goes low.
 
-   Note: The counter should increment for ALL conditional branch instructions, regardless of whether the branch is taken or not taken. The counter increments when the branch instruction is executed (when `is_beq_bne_blt_bge_bltu_bgeu` is true).
+### CSR Access
 
-4. **CSR Access**: The counter must be readable via a custom CSR (Control and Status Register) at address `0xBC0` using the `csrr` instruction:
-   ```
-   csrr xN, 0xBC0  // Reads count_branch into register xN
-   ```
+Make it readable via CSR address `0xBC0`:
+```
+csrr xN, 0xBC0  // Reads count_branch into register xN
+```
 
-5. **CSR Decode Pattern**: The CSR instruction decode should match the pattern used by other counter CSRs (rdcycle, rdinstr):
-   - Opcode: `7'b1110011` (CSR instruction opcode)
-   - CSR address [31:20]: `12'hBC0`
-   - funct3 [14:12]: `3'b010` (CSRR)
-   - Full pattern: `mem_rdata_q[31:12] == 20'hBC002`
+The decode pattern should match other counters (rdcycle, rdinstr):
+- Opcode: `7'b1110011`
+- CSR address [31:20]: `12'hBC0`
+- funct3 [14:12]: `3'b010` (CSRR)
+- Full match: `mem_rdata_q[31:12] == 20'hBC002`
 
-6. **Enable Condition**: The counter should only be active when `ENABLE_COUNTERS` parameter is set (same as other counters).
+### Enable Condition
 
-### Expected Observable Effects
+Only active when `ENABLE_COUNTERS` is set (like the other counters).
 
-1. **Test Program**: A test program (`tests/branch_counter.S`) must be created that:
-   - Reads the initial counter value via `csrr x10, 0xBC0`
-   - Executes a known number of conditional branch instructions (e.g., 5 branches in a loop)
-   - Reads the counter again and verifies it incremented by the expected amount
-   - Executes additional conditional branches (e.g., 3 branches that are not taken)
-   - Verifies the final counter value
+### Testing
 
-2. **Test Integration**: The test must be added to `firmware/start.S` using the `TEST(branch_counter)` macro.
+Create a test file `tests/branch_counter.S` that:
+- Reads initial counter value with `csrr x10, 0xBC0`
+- Runs some branches (e.g., 5 branches in a loop)
+- Checks the counter incremented correctly
+- Runs more branches (e.g., 3 not-taken branches)
+- Verifies final value
 
-3. **Success Criteria**: When running `make TOOLCHAIN_PREFIX=riscv64-elf- test`, the output must include:
-   - `branch_counter..OK`
-   - `ALL TESTS PASSED.`
+Add `TEST(branch_counter)` to `firmware/start.S`.
+
+When you run `make TOOLCHAIN_PREFIX=riscv64-elf- test`, you should see:
+- `branch_counter..OK`
+- `ALL TESTS PASSED.`
 
 ### Constraints
 
-- Do not modify external interfaces of the top-level module
+- Don't change the top-level module interface
 - Only modify `picorv32.v`, `firmware/start.S`, and add `tests/branch_counter.S`
-- The counter must wrap around on overflow (32-bit unsigned arithmetic)
-- The implementation must be compatible with existing counter infrastructure (rdcycle, rdinstr)
-- The counter increments for all conditional branch instructions, whether taken or not taken
-- The counter should be included in the `is_rdcycle_rdcycleh_rdinstr_rdinstrh` wire assignment for consistency with other counters
+- Counter wraps on overflow (normal 32-bit unsigned behavior)
+- Should work with existing counter code (rdcycle, rdinstr)
+- Include in `is_rdcycle_rdcycleh_rdinstr_rdinstrh` wire for consistency

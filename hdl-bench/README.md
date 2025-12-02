@@ -1,135 +1,119 @@
 # HDL Benchmark Suite for PicoRV32
 
-This directory contains a comprehensive benchmark suite for testing HDL (Hardware Description Language) implementations on the PicoRV32 RISC-V processor core.
+A benchmark suite for testing HDL implementations on the PicoRV32 RISC-V processor. Inspired by SWE-Bench, but for hardware design.
 
-## Overview
+## What's This?
 
-The benchmark suite provides a structured framework for:
-- Defining independent benchmark tasks (features/bugfixes)
-- Implementing reference solutions with tests
-- Automating verification through patches and test runners
-- Ensuring reproducibility and provenance
+This benchmark suite lets you test LLMs (or humans) on real hardware design tasks. Each task requires modifying the PicoRV32 core to add a feature, and the solution must pass the full test suite.
+
+The framework handles cloning, patching, testing, and reporting results automatically.
 
 ## Directory Structure
 
 ```
 hdl-bench/
-├── instances/          # JSON configuration files for each benchmark task
-├── patches/            # Reference solution patches (git diffs)
-├── specs/              # Markdown specifications for each task
-├── scripts/            # Automation scripts
-│   └── run_instance.py # Main runner script
-└── README.md          # This file
+├── instances/          # Task configs (JSON)
+├── patches/            # Reference solutions (git diffs)
+├── specs/              # Task descriptions
+├── scripts/            # Automation
+│   └── run_instance.py
+└── README.md
 ```
 
 ## Prerequisites
 
+You'll need:
 - Python 3.6+
 - Git
 - RISC-V GNU toolchain (riscv64-elf-gcc or riscv32-unknown-elf-gcc)
 - Icarus Verilog (iverilog, vvp)
 - Make
 
-### Installing Dependencies
-
-macOS (Homebrew):
+Install on macOS:
 ```bash
 brew install riscv64-elf-gcc iverilog
 ```
 
-Ubuntu/Debian:
+Install on Ubuntu/Debian:
 ```bash
 sudo apt-get install gcc-riscv64-unknown-elf iverilog
 ```
 
-## Benchmark Tasks
+## Tasks
 
-### Task 1: Branch Instruction Counter
+### Task 1: Branch Counter
 
-Specification: specs/picorv32_task1_spec.md  
-Instance Config: instances/picorv32_task1.json  
-Reference Patch: patches/picorv32_task1_ref.diff
+Add a counter that tracks conditional branch instructions (beq, bne, blt, bge, bltu, bgeu). Readable via CSR 0xBC0.
 
-Adds a CSR-accessible counter (0xBC0) that tracks the number of conditional branch instructions (beq, bne, blt, bge, bltu, bgeu) executed.
+- Spec: `specs/picorv32_task1_spec.md`
+- Config: `instances/picorv32_task1.json`
+- Patch: `patches/picorv32_task1_ref.diff`
 
-### Task 2: Load/Store Instruction Counter
+### Task 2: Load/Store Counter
 
-Specification: specs/picorv32_task2_spec.md  
-Instance Config: instances/picorv32_task2.json  
-Reference Patch: patches/picorv32_task2_ref.diff
+Add a counter for load/store instructions (lb, lh, lw, lbu, lhu, sb, sh, sw). Readable via CSR 0xBC1.
 
-Adds a CSR-accessible counter (0xBC1) that tracks the number of load/store memory instructions (lb, lh, lw, lbu, lhu, sb, sh, sw) executed.
+- Spec: `specs/picorv32_task2_spec.md`
+- Config: `instances/picorv32_task2.json`
+- Patch: `patches/picorv32_task2_ref.diff`
 
-## Running Benchmarks
+## Running Tests
 
-### Using the Runner Script
-
-To run a benchmark instance:
+### Automated (Recommended)
 
 ```bash
 cd hdl-bench
 python3 scripts/run_instance.py instances/picorv32_task1.json patches/picorv32_task1_ref.diff
 ```
 
-The script will:
-1. Clone the PicoRV32 repository
-2. Checkout the baseline commit (3a232e7)
-3. Apply the reference patch
-4. Run the test commands
-5. Verify success/forbidden strings
-6. Return a JSON result: {"task_id": "...", "status": "pass"} or {"status": "fail", ...}
+The script clones the repo, applies the patch, runs tests, and returns JSON with pass/fail status.
 
-### Manual Testing
+### Manual
 
-To manually test a task:
+If you want to test manually:
 
 ```bash
-# From the picorv32 repository root
 git checkout picorv32_benchmark_v1  # or commit 3a232e7
 git apply hdl-bench/patches/picorv32_task1_ref.diff
 make TOOLCHAIN_PREFIX=riscv64-elf- test
 ```
 
-Expected output should include:
-- branch_counter..OK (for task1) or loadstore_counter..OK (for task2)
-- ALL TESTS PASSED.
+You should see `branch_counter..OK` and `ALL TESTS PASSED.` in the output.
 
-## Creating New Benchmark Tasks
+## Adding New Tasks
 
-### Step-by-Step Workflow
+Here's how I add new tasks:
 
-1. Create a Git Branch
+1. **Create a branch**
    ```bash
    git checkout picorv32_benchmark_v1
    git checkout -b picorv32_taskN_solution
    ```
 
-2. Implement the Feature/Test
-   - Modify picorv32.v as needed
-   - Create test file in tests/
-   - Add TEST(...) macro to firmware/start.S
+2. **Implement the feature**
+   - Edit `picorv32.v` 
+   - Add test file in `tests/`
+   - Add `TEST(...)` to `firmware/start.S`
 
-3. Verify Locally
+3. **Test it**
    ```bash
    make clean
    make TOOLCHAIN_PREFIX=riscv64-elf- test
    ```
 
-4. Generate Reference Patch
+4. **Generate patch**
    ```bash
-   git add <modified_files>
+   git add <your files>
    git diff --cached picorv32_benchmark_v1 > hdl-bench/patches/picorv32_taskN_ref.diff
    ```
 
-5. Create Instance Configuration
-   - Create hdl-bench/instances/picorv32_taskN.json
-   - Define task_id, baseline_commit, test_cmds, success_strings, etc.
+5. **Create instance JSON**
+   Create `hdl-bench/instances/picorv32_taskN.json` with task config (see format below).
 
-6. Create Specification
-   - Create hdl-bench/specs/picorv32_taskN_spec.md
-   - Document requirements, constraints, and expected behavior
+6. **Write spec**
+   Create `hdl-bench/specs/picorv32_taskN_spec.md` describing what needs to be done.
 
-7. Validate with Runner
+7. **Validate**
    ```bash
    python3 hdl-bench/scripts/run_instance.py \
      hdl-bench/instances/picorv32_taskN.json \
@@ -137,6 +121,8 @@ Expected output should include:
    ```
 
 ## Instance JSON Format
+
+Each task needs a JSON config file:
 
 ```json
 {
@@ -154,42 +140,36 @@ Expected output should include:
 }
 ```
 
-## Baseline Commit
+## Baseline
 
-All tasks use commit 3a232e7 (tagged as picorv32_benchmark_v1) as the baseline. This ensures:
-- Consistent starting point
-- Reproducible patches
-- Clean separation between tasks
+All tasks start from commit `3a232e7` (tagged `picorv32_benchmark_v1`). This keeps things consistent and makes patches reproducible.
 
 ## Troubleshooting
 
-### Patch Application Fails
+**Patch won't apply?**
+- Make sure you're on a clean baseline: `git reset --hard picorv32_benchmark_v1`
+- Check that the patch was generated from the right commit
+- Look for context line mismatches
 
-- Ensure you're starting from a clean baseline: git reset --hard picorv32_benchmark_v1
-- Verify patch was generated from the correct baseline commit
-- Check for context mismatches in the patch file
+**Tests failing?**
+- Check toolchain: `riscv64-elf-gcc --version`
+- Check Verilog tools: `iverilog -v`
+- Make sure test names match `TEST(...)` macros in `firmware/start.S`
 
-### Test Failures
-
-- Verify toolchain is installed: riscv64-elf-gcc --version
-- Check that Icarus Verilog is available: iverilog -v
-- Ensure test labels match TEST(...) macro in firmware/start.S
-
-### Runner Script Issues
-
-- Ensure Python 3.6+ is available: python3 --version
-- Check that Git can clone the repository
-- Verify patch file path is correct and accessible
+**Runner script issues?**
+- Python version: `python3 --version` (needs 3.6+)
+- Git can clone the repo?
+- Patch file path correct?
 
 ## Contributing
 
-When adding new tasks:
-1. Follow the existing task structure
-2. Ensure tests are comprehensive and self-checking
-3. Document all requirements in the spec file
-4. Validate with the runner script before committing
-5. Keep patches minimal and focused on the task
+When adding tasks:
+- Keep the same structure as existing tasks
+- Write tests that check themselves
+- Put requirements in the spec file
+- Test with the runner before committing
+- Keep patches focused - only what's needed for the task
 
 ## License
 
-This benchmark suite follows the same license as the PicoRV32 project (ISC License).
+Same as PicoRV32 (ISC License).

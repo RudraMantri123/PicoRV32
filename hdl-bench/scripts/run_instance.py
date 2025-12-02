@@ -2,12 +2,8 @@
 """
 HDL Benchmark Instance Runner
 
-This script runs a benchmark instance by:
-1. Cloning the repository at the baseline commit
-2. Applying a candidate patch
-3. Running the test commands
-4. Checking for success/forbidden strings
-5. Returning a JSON result
+Runs a benchmark instance by cloning the repo, applying a patch,
+running tests, and checking results.
 """
 
 import json
@@ -19,7 +15,7 @@ import shutil
 import os
 
 def run_cmd(cmd, cwd, timeout=None):
-    """Run a shell command and return exit code and stdout."""
+    """Run a shell command, return exit code and stdout."""
     try:
         result = subprocess.run(
             cmd,
@@ -43,18 +39,18 @@ def main():
     config_path = pathlib.Path(sys.argv[1]).resolve()
     patch_path = pathlib.Path(sys.argv[2]).resolve()
 
-    # Load instance configuration
+    # Load config
     with open(config_path) as f:
         cfg = json.load(f)
 
-    # Create temporary working directory
+    # Temp directory for this run
     workdir = pathlib.Path(tempfile.mkdtemp(prefix=cfg["task_id"] + "_"))
     repo_dir = workdir / "repo"
 
     try:
         print(f"Working directory: {workdir}", file=sys.stderr)
 
-        # Step 1: Clone repository
+        # Clone repo
         print("Cloning {} ...".format(cfg['repo']), file=sys.stderr)
         code, out = run_cmd(f"git clone {cfg['repo']} repo", cwd=workdir, timeout=300)
         if code != 0:
@@ -65,7 +61,7 @@ def main():
                 "error": out[-500:] if len(out) > 500 else out
             }
 
-        # Step 2: Checkout baseline commit
+        # Checkout baseline
         print("Checking out {} ...".format(cfg['baseline_commit']), file=sys.stderr)
         code, out = run_cmd(f"git checkout {cfg['baseline_commit']}", cwd=repo_dir, timeout=60)
         if code != 0:
@@ -76,7 +72,7 @@ def main():
                 "error": out[-500:] if len(out) > 500 else out
             }
 
-        # Step 3: Apply patch
+        # Apply patch
         print("Applying patch {} ...".format(patch_path), file=sys.stderr)
         code, out = run_cmd(f"git apply {patch_path}", cwd=repo_dir, timeout=60)
         if code != 0:
@@ -87,7 +83,7 @@ def main():
                 "error": out[-500:] if len(out) > 500 else out
             }
 
-        # Step 4: Validate allowed paths (optional check)
+        # Check allowed paths (optional)
         code, out = run_cmd("git diff --name-only HEAD", cwd=repo_dir, timeout=30)
         if code == 0:
             changed_files = [f.strip() for f in out.split('\n') if f.strip()]
@@ -102,7 +98,7 @@ def main():
                             "error": f"File {f} not in allowed_paths: {allowed_paths}"
                         }
 
-        # Step 5: Run test commands
+        # Run tests
         full_log = ""
         all_passed = True
 
@@ -113,23 +109,23 @@ def main():
             if code != 0:
                 all_passed = False
 
-        # Step 6: Check success/forbidden strings
+        # Check strings
         if all_passed:
-            # Check for forbidden strings
+            # Forbidden strings
             forbidden_strings = cfg.get("forbidden_strings", [])
             for bad in forbidden_strings:
                 if bad in full_log:
                     all_passed = False
                     break
 
-            # Check for required success strings
+            # Required success strings
             success_strings = cfg.get("success_strings", [])
             for good in success_strings:
                 if good not in full_log:
                     all_passed = False
                     break
 
-        # Step 7: Return result
+        # Return result
         result = {
             "task_id": cfg["task_id"],
             "status": "pass" if all_passed else "fail"
