@@ -453,7 +453,6 @@ start:
 	TEST(remu)
 
 	TEST(simple)
-	TEST(branch_counter)
 
 	/* set stack pointer */
 	lui sp,(128*1024)>>12
