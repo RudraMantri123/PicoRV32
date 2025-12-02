@@ -1,0 +1,19 @@
+{
+  "task_id": "picorv32_task1",
+  "repo": "https://github.com/YosysHQ/picorv32.git",
+  "baseline_commit": "3a232e7",
+  "baseline_tag": "picorv32_benchmark_v1",
+  "spec_path": "specs/picorv32_task1_spec.md",
+  "ref_patch_path": "patches/picorv32_task1_ref.diff",
+  "allowed_paths": [
+    "picorv32.v",
+    "firmware/",
+    "tests/"
+  ],
+  "test_cmds": [
+    "make TOOLCHAIN_PREFIX=riscv64-elf- test"
+  ],
+  "timeout_s": 600,
+  "success_strings": ["ALL TESTS PASSED.", "branch_counter..OK"],
+  "forbidden_strings": ["FAIL", "$fatal", "assertion"]
+}

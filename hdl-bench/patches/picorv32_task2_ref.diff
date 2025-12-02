@@ -1,0 +1,186 @@
+diff --git a/firmware/start.S b/firmware/start.S
+index aa2a36b..e8d3f52 100644
+--- a/firmware/start.S
++++ b/firmware/start.S
+@@ -453,6 +453,7 @@ start:
+ 	TEST(remu)
+ 
+ 	TEST(simple)
++	TEST(loadstore_counter)
+ 
+ 	/* set stack pointer */
+ 	lui sp,(128*1024)>>12
+diff --git a/picorv32.v b/picorv32.v
+index cc45fa9..d96c3c7 100644
+--- a/picorv32.v
++++ b/picorv32.v
+@@ -173,6 +173,7 @@ module picorv32 #(
+ 	localparam [35:0] TRACE_IRQ    = {4'b 1000, 32'b 0};
+ 
+ 	reg [63:0] count_cycle, count_instr;
++	reg [31:0] count_loadstore;
+ 	reg [31:0] reg_pc, reg_next_pc, reg_op1, reg_op2, reg_out;
+ 	reg [4:0] reg_sh;
+ 
+@@ -648,7 +649,7 @@ module picorv32 #(
+ 	reg instr_lb, instr_lh, instr_lw, instr_lbu, instr_lhu, instr_sb, instr_sh, instr_sw;
+ 	reg instr_addi, instr_slti, instr_sltiu, instr_xori, instr_ori, instr_andi, instr_slli, instr_srli, instr_srai;
+ 	reg instr_add, instr_sub, instr_sll, instr_slt, instr_sltu, instr_xor, instr_srl, instr_sra, instr_or, instr_and;
+-	reg instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_ecall_ebreak, instr_fence;
++	reg instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdloadstore, instr_ecall_ebreak, instr_fence;
+ 	reg instr_getq, instr_setq, instr_retirq, instr_maskirq, instr_waitirq, instr_timer;
+ 	wire instr_trap;
+ 
+@@ -681,11 +682,11 @@ module picorv32 #(
+ 			instr_lb, instr_lh, instr_lw, instr_lbu, instr_lhu, instr_sb, instr_sh, instr_sw,
+ 			instr_addi, instr_slti, instr_sltiu, instr_xori, instr_ori, instr_andi, instr_slli, instr_srli, instr_srai,
+ 			instr_add, instr_sub, instr_sll, instr_slt, instr_sltu, instr_xor, instr_srl, instr_sra, instr_or, instr_and,
+-			instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_fence,
++			instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdloadstore, instr_fence,
+ 			instr_getq, instr_setq, instr_retirq, instr_maskirq, instr_waitirq, instr_timer};
+ 
+ 	wire is_rdcycle_rdcycleh_rdinstr_rdinstrh;
+-	assign is_rdcycle_rdcycleh_rdinstr_rdinstrh = |{instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh};
++	assign is_rdcycle_rdcycleh_rdinstr_rdinstrh = |{instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdloadstore};
+ 
+ 	reg [63:0] new_ascii_instr;
+ 	`FORMAL_KEEP reg [63:0] dbg_ascii_instr;
+@@ -747,6 +748,7 @@ module picorv32 #(
+ 		if (instr_rdcycleh) new_ascii_instr = "rdcycleh";
+ 		if (instr_rdinstr)  new_ascii_instr = "rdinstr";
+ 		if (instr_rdinstrh) new_ascii_instr = "rdinstrh";
++		if (instr_rdloadstore) new_ascii_instr = "rdloadstore";
+ 		if (instr_fence)    new_ascii_instr = "fence";
+ 
+ 		if (instr_getq)     new_ascii_instr = "getq";
+@@ -1082,6 +1084,7 @@ module picorv32 #(
+ 			                   (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11001000000100000010)) && ENABLE_COUNTERS && ENABLE_COUNTERS64;
+ 			instr_rdinstr  <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11000000001000000010) && ENABLE_COUNTERS;
+ 			instr_rdinstrh <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11001000001000000010) && ENABLE_COUNTERS && ENABLE_COUNTERS64;
++			instr_rdloadstore <= (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 20'hBC102) && ENABLE_COUNTERS;
+ 
+ 			instr_ecall_ebreak <= ((mem_rdata_q[6:0] == 7'b1110011 && !mem_rdata_q[31:21] && !mem_rdata_q[19:7]) ||
+ 					(COMPRESSED_ISA && mem_rdata_q[15:0] == 16'h9002));
+@@ -1435,6 +1438,7 @@ module picorv32 #(
+ 		end else begin
+ 			count_cycle <= 'bx;
+ 			count_instr <= 'bx;
++			count_loadstore <= 'bx;
+ 		end
+ 
+ 		next_irq_pending = ENABLE_IRQ ? irq_pending & LATCHED_IRQ : 'bx;
+@@ -1457,8 +1461,10 @@ module picorv32 #(
+ 		if (!resetn) begin
+ 			reg_pc <= PROGADDR_RESET;
+ 			reg_next_pc <= PROGADDR_RESET;
+-			if (ENABLE_COUNTERS)
++			if (ENABLE_COUNTERS) begin
+ 				count_instr <= 0;
++				count_loadstore <= 0;
++			end
+ 			latched_store <= 0;
+ 			latched_stalu <= 0;
+ 			latched_branch <= 0;
+@@ -1634,6 +1640,8 @@ module picorv32 #(
+ 								reg_out <= count_instr[31:0];
+ 							instr_rdinstrh && ENABLE_COUNTERS64:
+ 								reg_out <= count_instr[63:32];
++							instr_rdloadstore:
++								reg_out <= count_loadstore;
+ 						endcase
+ 						latched_store <= 1;
+ 						cpu_state <= cpu_state_fetch;
+@@ -1870,6 +1878,8 @@ module picorv32 #(
+ 						set_mem_do_wdata = 1;
+ 					end
+ 					if (!mem_do_prefetch && mem_done) begin
++						if (ENABLE_COUNTERS)
++							count_loadstore <= count_loadstore + 1;
+ 						cpu_state <= cpu_state_fetch;
+ 						decoder_trigger <= 1;
+ 						decoder_pseudo_trigger <= 1;
+@@ -1904,6 +1914,8 @@ module picorv32 #(
+ 							latched_is_lh: reg_out <= $signed(mem_rdata_word[15:0]);
+ 							latched_is_lb: reg_out <= $signed(mem_rdata_word[7:0]);
+ 						endcase
++						if (ENABLE_COUNTERS)
++							count_loadstore <= count_loadstore + 1;
+ 						decoder_trigger <= 1;
+ 						decoder_pseudo_trigger <= 1;
+ 						cpu_state <= cpu_state_fetch;
+diff --git a/tests/loadstore_counter.S b/tests/loadstore_counter.S
+new file mode 100644
+index 0000000..3b838cf
+--- /dev/null
++++ b/tests/loadstore_counter.S
+@@ -0,0 +1,70 @@
++# See LICENSE for license details.
++
++#*****************************************************************************
++# loadstore_counter.S
++#-----------------------------------------------------------------------------
++#
++# Test load/store instruction counter CSR 0xBC1
++#
++
++#include "riscv_test.h"
++#include "test_macros.h"
++
++RVTEST_RV32U
++.option arch, +zicsr
++RVTEST_CODE_BEGIN
++
++  # Read initial value of load/store counter
++  csrr x10, 0xBC1
++
++  # Load tdat address
++  la x1, tdat
++  
++  # Execute 3 loads
++  lw x2, 0(x1)
++  lw x3, 4(x1)
++  lh x4, 8(x1)
++
++  # Execute 2 stores
++  sw x2, 12(x1)
++  sw x3, 16(x1)
++
++  # Read counter again
++  csrr x11, 0xBC1
++  sub x12, x11, x10
++  li x13, 5
++  bne x12, x13, fail
++
++  # Execute 2 more loads
++  lb x6, 0(x1)
++  lbu x7, 1(x1)
++
++  # Execute 1 more store
++  sb x6, 20(x1)
++
++  # Read final counter value
++  csrr x14, 0xBC1
++  sub x15, x14, x11
++  li x16, 3
++  bne x15, x16, fail
++
++  RVTEST_PASS
++
++fail:
++  RVTEST_FAIL
++
++RVTEST_CODE_END
++
++  .data
++RVTEST_DATA_BEGIN
++
++tdat:
++  .word 0x12345678
++  .word 0x9ABCDEF0
++  .half 0x5678
++  .fill 20, 1, 0
++
++  TEST_DATA
++
++RVTEST_DATA_END
++

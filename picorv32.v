@@ -173,6 +173,7 @@ module picorv32 #(
 	localparam [35:0] TRACE_IRQ    = {4'b 1000, 32'b 0};
 
 	reg [63:0] count_cycle, count_instr;
+	reg [31:0] count_branch;
 	reg [31:0] reg_pc, reg_next_pc, reg_op1, reg_op2, reg_out;
 	reg [4:0] reg_sh;
 
@@ -648,7 +649,7 @@ module picorv32 #(
 	reg instr_lb, instr_lh, instr_lw, instr_lbu, instr_lhu, instr_sb, instr_sh, instr_sw;
 	reg instr_addi, instr_slti, instr_sltiu, instr_xori, instr_ori, instr_andi, instr_slli, instr_srli, instr_srai;
 	reg instr_add, instr_sub, instr_sll, instr_slt, instr_sltu, instr_xor, instr_srl, instr_sra, instr_or, instr_and;
-	reg instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_ecall_ebreak, instr_fence;
+	reg instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdbranch, instr_ecall_ebreak, instr_fence;
 	reg instr_getq, instr_setq, instr_retirq, instr_maskirq, instr_waitirq, instr_timer;
 	wire instr_trap;
 
@@ -681,11 +682,11 @@ module picorv32 #(
 			instr_lb, instr_lh, instr_lw, instr_lbu, instr_lhu, instr_sb, instr_sh, instr_sw,
 			instr_addi, instr_slti, instr_sltiu, instr_xori, instr_ori, instr_andi, instr_slli, instr_srli, instr_srai,
 			instr_add, instr_sub, instr_sll, instr_slt, instr_sltu, instr_xor, instr_srl, instr_sra, instr_or, instr_and,
-			instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_fence,
+			instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdbranch, instr_fence,
 			instr_getq, instr_setq, instr_retirq, instr_maskirq, instr_waitirq, instr_timer};
 
 	wire is_rdcycle_rdcycleh_rdinstr_rdinstrh;
-	assign is_rdcycle_rdcycleh_rdinstr_rdinstrh = |{instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh};
+	assign is_rdcycle_rdcycleh_rdinstr_rdinstrh = |{instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdbranch};
 
 	reg [63:0] new_ascii_instr;
 	`FORMAL_KEEP reg [63:0] dbg_ascii_instr;
@@ -747,6 +748,7 @@ module picorv32 #(
 		if (instr_rdcycleh) new_ascii_instr = "rdcycleh";
 		if (instr_rdinstr)  new_ascii_instr = "rdinstr";
 		if (instr_rdinstrh) new_ascii_instr = "rdinstrh";
+		if (instr_rdbranch) new_ascii_instr = "rdbranch";
 		if (instr_fence)    new_ascii_instr = "fence";
 
 		if (instr_getq)     new_ascii_instr = "getq";
@@ -1082,6 +1084,7 @@ module picorv32 #(
 			                   (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11001000000100000010)) && ENABLE_COUNTERS && ENABLE_COUNTERS64;
 			instr_rdinstr  <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11000000001000000010) && ENABLE_COUNTERS;
 			instr_rdinstrh <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11001000001000000010) && ENABLE_COUNTERS && ENABLE_COUNTERS64;
+			instr_rdbranch <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 20'hBC002) && ENABLE_COUNTERS;
 
 			instr_ecall_ebreak <= ((mem_rdata_q[6:0] == 7'b1110011 && !mem_rdata_q[31:21] && !mem_rdata_q[19:7]) ||
 					(COMPRESSED_ISA && mem_rdata_q[15:0] == 16'h9002));
@@ -1435,6 +1438,7 @@ module picorv32 #(
 		end else begin
 			count_cycle <= 'bx;
 			count_instr <= 'bx;
+			count_branch <= 'bx;
 		end
 
 		next_irq_pending = ENABLE_IRQ ? irq_pending & LATCHED_IRQ : 'bx;
@@ -1457,8 +1461,10 @@ module picorv32 #(
 		if (!resetn) begin
 			reg_pc <= PROGADDR_RESET;
 			reg_next_pc <= PROGADDR_RESET;
-			if (ENABLE_COUNTERS)
+			if (ENABLE_COUNTERS) begin
 				count_instr <= 0;
+				count_branch <= 0;
+			end
 			latched_store <= 0;
 			latched_stalu <= 0;
 			latched_branch <= 0;
@@ -1563,6 +1569,7 @@ module picorv32 #(
 					if (ENABLE_COUNTERS) begin
 						count_instr <= count_instr + 1;
 						if (!ENABLE_COUNTERS64) count_instr[63:32] <= 0;
+						if (is_beq_bne_blt_bge_bltu_bgeu) count_branch <= count_branch + 1;
 					end
 					if (instr_jal) begin
 						mem_do_rinst <= 1;
@@ -1634,6 +1641,8 @@ module picorv32 #(
 								reg_out <= count_instr[31:0];
 							instr_rdinstrh && ENABLE_COUNTERS64:
 								reg_out <= count_instr[63:32];
+							instr_rdbranch:
+								reg_out <= count_branch;
 						endcase
 						latched_store <= 1;
 						cpu_state <= cpu_state_fetch;
