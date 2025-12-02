@@ -39,7 +39,7 @@ index cc45fa9..d96c3c7 100644
  
  			instr_ecall_ebreak <= ((mem_rdata_q[6:0] == 7'b1110011 && !mem_rdata_q[31:21] && !mem_rdata_q[19:7]) ||
  					(COMPRESSED_ISA && mem_rdata_q[15:0] == 16'h9002));
-@@ -1457,8 +1459,10 @@ module picorv32 #(
+@@ -1457,8 +1459,9 @@ module picorv32 #(
  		if (!resetn) begin
  			reg_pc <= PROGADDR_RESET;
  			reg_next_pc <= PROGADDR_RESET;
@@ -51,7 +51,7 @@ index cc45fa9..d96c3c7 100644
  			latched_store <= 0;
  			latched_stalu <= 0;
  			latched_branch <= 0;
-@@ -1634,6 +1638,8 @@ module picorv32 #(
+@@ -1634,6 +1637,8 @@ module picorv32 #(
  								reg_out <= count_instr[31:0];
  							instr_rdinstrh && ENABLE_COUNTERS64:
  								reg_out <= count_instr[63:32];
@@ -60,7 +60,7 @@ index cc45fa9..d96c3c7 100644
  						endcase
  						latched_store <= 1;
  						cpu_state <= cpu_state_fetch;
-@@ -1878,6 +1884,8 @@ module picorv32 #(
+@@ -1878,6 +1883,8 @@ module picorv32 #(
  						set_mem_do_wdata = 1;
  					end
  					if (!mem_do_prefetch && mem_done) begin
@@ -69,7 +69,7 @@ index cc45fa9..d96c3c7 100644
  						cpu_state <= cpu_state_fetch;
  						decoder_trigger <= 1;
  						decoder_pseudo_trigger <= 1;
-@@ -1914,6 +1922,8 @@ module picorv32 #(
+@@ -1914,6 +1921,8 @@ module picorv32 #(
  							latched_is_lh: reg_out <= $signed(mem_rdata_word[15:0]);
  							latched_is_lb: reg_out <= $signed(mem_rdata_word[7:0]);
  						endcase
@@ -146,7 +146,7 @@ index 0000000..3b838cf
 +
 +tdat:
 +  .word 0x12345678
-+  .word 00x9ABCDEF0
++  .word 0x9ABCDEF0
 +  .half 0x5678
 +  .fill 20, 1, 0
 +
