@@ -31,29 +31,7 @@ index cc45fa9..d96c3c7 100644
  	reg instr_getq, instr_setq, instr_retirq, instr_maskirq, instr_waitirq, instr_timer;
  	wire instr_trap;
  
-@@ -681,11 +682,11 @@ module picorv32 #(
- 			instr_lb, instr_lh, instr_lw, instr_lbu, instr_lhu, instr_sb, instr_sh, instr_sw,
- 			instr_addi, instr_slti, instr_sltiu, instr_xori, instr_ori, instr_andi, instr_slli, instr_srli, instr_srai,
- 			instr_add, instr_sub, instr_sll, instr_slt, instr_sltu, instr_xor, instr_srl, instr_sra, instr_or, instr_and,
--			instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_fence,
-+			instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdloadstore, instr_fence,
- 			instr_getq, instr_setq, instr_retirq, instr_maskirq, instr_waitirq, instr_timer};
- 
- 	wire is_rdcycle_rdcycleh_rdinstr_rdinstrh;
--	assign is_rdcycle_rdcycleh_rdinstr_rdinstrh = |{instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh};
-+	assign is_rdcycle_rdcycleh_rdinstr_rdinstrh = |{instr_rdcycle, instr_rdcycleh, instr_rdinstr, instr_rdinstrh, instr_rdloadstore};
- 
- 	reg [63:0] new_ascii_instr;
- 	`FORMAL_KEEP reg [63:0] dbg_ascii_instr;
-@@ -747,6 +748,7 @@ module picorv32 #(
- 		if (instr_rdcycleh) new_ascii_instr = "rdcycleh";
- 		if (instr_rdinstr)  new_ascii_instr = "rdinstr";
- 		if (instr_rdinstrh) new_ascii_instr = "rdinstrh";
-+		if (instr_rdloadstore) new_ascii_instr = "rdloadstore";
- 		if (instr_fence)    new_ascii_instr = "fence";
- 
- 		if (instr_getq)     new_ascii_instr = "getq";
-@@ -1082,6 +1084,7 @@ module picorv32 #(
+@@ -1082,6 +1083,7 @@ module picorv32 #(
  			                   (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11001000000100000010)) && ENABLE_COUNTERS && ENABLE_COUNTERS64;
  			instr_rdinstr  <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11000000001000000010) && ENABLE_COUNTERS;
  			instr_rdinstrh <=  (mem_rdata_q[6:0] == 7'b1110011 && mem_rdata_q[31:12] == 'b11001000001000000010) && ENABLE_COUNTERS && ENABLE_COUNTERS64;
@@ -61,15 +39,7 @@ index cc45fa9..d96c3c7 100644
  
  			instr_ecall_ebreak <= ((mem_rdata_q[6:0] == 7'b1110011 && !mem_rdata_q[31:21] && !mem_rdata_q[19:7]) ||
  					(COMPRESSED_ISA && mem_rdata_q[15:0] == 16'h9002));
-@@ -1435,6 +1438,7 @@ module picorv32 #(
- 		end else begin
- 			count_cycle <= 'bx;
- 			count_instr <= 'bx;
-+			count_loadstore <= 'bx;
- 		end
- 
- 		next_irq_pending = ENABLE_IRQ ? irq_pending & LATCHED_IRQ : 'bx;
-@@ -1457,8 +1461,10 @@ module picorv32 #(
+@@ -1457,8 +1459,10 @@ module picorv32 #(
  		if (!resetn) begin
  			reg_pc <= PROGADDR_RESET;
  			reg_next_pc <= PROGADDR_RESET;
@@ -81,7 +51,7 @@ index cc45fa9..d96c3c7 100644
  			latched_store <= 0;
  			latched_stalu <= 0;
  			latched_branch <= 0;
-@@ -1634,6 +1640,8 @@ module picorv32 #(
+@@ -1634,6 +1638,8 @@ module picorv32 #(
  								reg_out <= count_instr[31:0];
  							instr_rdinstrh && ENABLE_COUNTERS64:
  								reg_out <= count_instr[63:32];
@@ -90,7 +60,7 @@ index cc45fa9..d96c3c7 100644
  						endcase
  						latched_store <= 1;
  						cpu_state <= cpu_state_fetch;
-@@ -1870,6 +1878,8 @@ module picorv32 #(
+@@ -1878,6 +1884,8 @@ module picorv32 #(
  						set_mem_do_wdata = 1;
  					end
  					if (!mem_do_prefetch && mem_done) begin
@@ -99,7 +69,7 @@ index cc45fa9..d96c3c7 100644
  						cpu_state <= cpu_state_fetch;
  						decoder_trigger <= 1;
  						decoder_pseudo_trigger <= 1;
-@@ -1904,6 +1914,8 @@ module picorv32 #(
+@@ -1914,6 +1922,8 @@ module picorv32 #(
  							latched_is_lh: reg_out <= $signed(mem_rdata_word[15:0]);
  							latched_is_lb: reg_out <= $signed(mem_rdata_word[7:0]);
  						endcase
@@ -176,11 +146,10 @@ index 0000000..3b838cf
 +
 +tdat:
 +  .word 0x12345678
-+  .word 0x9ABCDEF0
++  .word 00x9ABCDEF0
 +  .half 0x5678
 +  .fill 20, 1, 0
 +
 +  TEST_DATA
 +
 +RVTEST_DATA_END
-+
